@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Users, Trash2, X, ChevronRight } from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { ClassData } from '../../types';
+import type { ClassData } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ClassManager() {
