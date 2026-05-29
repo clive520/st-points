@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, Trash2, UserPlus, Star } from 'lucide-react';
+import { ArrowLeft, Upload, Trash2, UserPlus, Star, Edit2 } from 'lucide-react';
 import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../../lib/firebase';
@@ -19,6 +19,9 @@ export default function ClassDetails() {
 
   const [isSingleAddModalOpen, setIsSingleAddModalOpen] = useState(false);
   const [newStudent, setNewStudent] = useState({ seatNumber: 1, name: '', gender: '男', password: '' });
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
   const [isCoTeacherModalOpen, setIsCoTeacherModalOpen] = useState(false);
   const [coTeacherEmail, setCoTeacherEmail] = useState('');
@@ -131,6 +134,25 @@ export default function ClassDetails() {
     if (!window.confirm('確定要刪除這位學生嗎？其點數將一併消失。')) return;
     await deleteDoc(doc(db, 'students', id));
     fetchClassAndStudents();
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      await updateDoc(doc(db, 'students', editingStudent.id), {
+        seatNumber: editingStudent.seatNumber,
+        name: editingStudent.name,
+        gender: editingStudent.gender,
+        password: editingStudent.password,
+        points: editingStudent.points,
+      });
+      setIsEditModalOpen(false);
+      setEditingStudent(null);
+      fetchClassAndStudents();
+    } catch (error) {
+      console.error('更新失敗:', error);
+    }
   };
 
   const handleResetPoints = async () => {
@@ -259,8 +281,19 @@ export default function ClassDetails() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <button 
+                      onClick={() => {
+                        setEditingStudent(student);
+                        setIsEditModalOpen(true);
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                      title="編輯資料"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
                       onClick={() => handleDeleteStudent(student.id)}
                       className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                      title="刪除"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -336,11 +369,11 @@ export default function ClassDetails() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">座號</label>
-                    <input type="number" required min="1" value={newStudent.seatNumber} onChange={e => setNewStudent({...newStudent, seatNumber: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800" />
+                    <input type="number" required min="1" value={newStudent.seatNumber} onChange={e => setNewStudent({...newStudent, seatNumber: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">性別</label>
-                    <select value={newStudent.gender} onChange={e => setNewStudent({...newStudent, gender: e.target.value as '男'|'女'})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                    <select value={newStudent.gender} onChange={e => setNewStudent({...newStudent, gender: e.target.value as '男'|'女'})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none">
                       <option value="男">男</option>
                       <option value="女">女</option>
                     </select>
@@ -348,15 +381,62 @@ export default function ClassDetails() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">姓名</label>
-                  <input type="text" required value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800" />
+                  <input type="text" required value={newStudent.name} onChange={e => setNewStudent({...newStudent, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">登入密碼 (留空則使用預設)</label>
-                  <input type="text" value={newStudent.password} onChange={e => setNewStudent({...newStudent, password: e.target.value})} placeholder={`預設為 pwd${newStudent.seatNumber}1234`} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-mono" />
+                  <input type="text" value={newStudent.password} onChange={e => setNewStudent({...newStudent, password: e.target.value})} placeholder={`預設為 pwd${newStudent.seatNumber}1234`} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-mono focus:ring-2 focus:ring-purple-500 outline-none" />
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button type="button" onClick={() => setIsSingleAddModalOpen(false)} className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition">取消</button>
                   <button type="submit" className="flex-1 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition shadow-md">新增學生</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 編輯學生 Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && editingStudent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-md shadow-2xl"
+            >
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">編輯學生資料</h3>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">座號</label>
+                    <input type="number" required min="1" value={editingStudent.seatNumber} onChange={e => setEditingStudent({...editingStudent, seatNumber: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">性別</label>
+                    <select value={editingStudent.gender} onChange={e => setEditingStudent({...editingStudent, gender: e.target.value as '男'|'女'})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none">
+                      <option value="男">男</option>
+                      <option value="女">女</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">姓名</label>
+                  <input type="text" required value={editingStudent.name} onChange={e => setEditingStudent({...editingStudent, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">登入密碼</label>
+                  <input type="text" required value={editingStudent.password} onChange={e => setEditingStudent({...editingStudent, password: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 font-mono focus:ring-2 focus:ring-purple-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">總點數</label>
+                  <input type="number" required value={editingStudent.points} onChange={e => setEditingStudent({...editingStudent, points: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-purple-500 outline-none" />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition">取消</button>
+                  <button type="submit" className="flex-1 py-3 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition shadow-md">儲存變更</button>
                 </div>
               </form>
             </motion.div>
