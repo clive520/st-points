@@ -16,8 +16,8 @@ export default function StudentDashboard() {
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isBidding, setIsBidding] = useState(false);
   
-  // 使用裁切好的 12 張小怪獸圖片
-  const AVATAR_URLS = Array.from({ length: 12 }, (_, i) => `/avatars/avatar_${i + 1}.png`);
+  // 使用裁切好的 24 張小怪獸圖片
+  const AVATAR_URLS = Array.from({ length: 24 }, (_, i) => `/avatars/avatar_${i + 1}.png`);
   
   const navigate = useNavigate();
 

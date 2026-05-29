@@ -60,7 +60,7 @@ def process_avatars(image_path, output_dir):
                 x2_crop = min(char_img.shape[1], x_box + w_box + pad)
                 char_img = char_img[y1_crop:y2_crop, x1_crop:x2_crop]
             
-            out_path = os.path.join(output_dir, f"avatar_{count}.png")
+            out_path = os.path.join(output_dir, f"avatar_{count + 12}.png")
             cv2.imwrite(out_path, char_img)
             print(f"Saved {out_path}")
             count += 1
@@ -69,5 +69,5 @@ def process_avatars(image_path, output_dir):
 
 if __name__ == "__main__":
     base_dir = r"C:\Users\hp\Documents\ST_points\public\avatars"
-    source_img = os.path.join(base_dir, "source.png")
+    source_img = os.path.join(base_dir, "source02.png")
     process_avatars(source_img, base_dir)
