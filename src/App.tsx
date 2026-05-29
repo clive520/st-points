@@ -1,12 +1,18 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import TeacherDashboard from './pages/teacher/Dashboard';
+import StudentLogin from './pages/student/Login';
+import StudentDashboard from './pages/student/Dashboard';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 預設先導向老師端，等學生端做好再做入口選擇頁面 */}
-        <Route path="/" element={<Navigate to="/teacher" replace />} />
+        {/* 預設導向學生登入頁面 */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        
+        {/* 學生端路由 */}
+        <Route path="/login" element={<StudentLogin />} />
+        <Route path="/student/dashboard" element={<StudentDashboard />} />
         
         {/* 老師端系統路由 */}
         <Route path="/teacher/*" element={<TeacherDashboard />} />

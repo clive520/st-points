@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Users, Trash2, X, ChevronRight } from 'lucide-react';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -10,6 +11,7 @@ export default function ClassManager() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
 
   const fetchClasses = async () => {
     setIsLoading(true);
@@ -88,6 +90,7 @@ export default function ClassManager() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               key={cls.id} 
+              onClick={() => navigate(`/teacher/classes/${cls.id}`)}
               className="group bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 hover:shadow-md transition-all cursor-pointer"
             >
               <div className="flex justify-between items-start mb-4">

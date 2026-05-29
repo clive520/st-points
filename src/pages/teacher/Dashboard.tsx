@@ -1,7 +1,9 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import { Users, Star, Gift, Settings } from 'lucide-react';
 import ClassManager from './ClassManager';
+import ClassDetails from './ClassDetails';
 import PointsManager from './PointsManager';
+import AuctionManager from './AuctionManager';
 
 const navItems = [
   { path: '/teacher/classes', icon: Users, label: '班級管理' },
@@ -48,7 +50,9 @@ export default function TeacherDashboard() {
       <main className="flex-1 overflow-auto p-8">
         <Routes>
           <Route path="classes" element={<ClassManager />} />
+          <Route path="classes/:classId" element={<ClassDetails />} />
           <Route path="points" element={<PointsManager />} />
+          <Route path="auctions" element={<AuctionManager />} />
           <Route path="*" element={<ClassManager />} />
         </Routes>
       </main>

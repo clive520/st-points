@@ -25,6 +25,7 @@ export interface AuctionItem {
   quantity: number; // 庫存數量
   currentHighestBid?: number;
   currentHighestBidderId?: string;
+  currentHighestBidderName?: string;
   status: 'pending' | 'active' | 'ended'; // 拍賣狀態
 }
 
