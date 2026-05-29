@@ -201,16 +201,18 @@ export default function StudentDashboard() {
             <div className="flex items-center gap-2 mb-4 text-yellow-800 dark:text-yellow-500 font-bold">
               <ShieldCheck /> 小老師任務：幫同學加分
             </div>
-            <div className="flex overflow-x-auto gap-4 pb-4 snap-x">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
               {classmates.filter(c => c.id !== student.id).map(c => (
-                <div key={c.id} className="min-w-[140px] snap-start bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-yellow-100 dark:border-yellow-900/50 flex flex-col items-center gap-2">
+                <div key={c.id} className="bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm border border-yellow-100 dark:border-yellow-900/50 flex flex-col items-center gap-2">
                   <img src={c.avatarUrl} alt={c.name} className="w-12 h-12 rounded-full bg-gray-100" />
-                  <div className="text-sm font-bold text-gray-800 dark:text-gray-100">{c.name}</div>
-                  <div className="text-xs text-purple-600 dark:text-purple-400 font-bold mb-2">{c.points} 點</div>
-                  <div className="grid grid-cols-2 gap-2 w-full">
-                    <button onClick={() => handleAssistantAddPoint(c.id, 1)} className="py-1 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg font-bold text-xs">+1</button>
-                    <button onClick={() => handleAssistantAddPoint(c.id, 5)} className="py-1 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg font-bold text-xs">+5</button>
-                  </div>
+                  <div className="text-sm font-bold text-gray-800 dark:text-gray-100 text-center truncate w-full">{c.name}</div>
+                  <div className="text-xs text-purple-600 dark:text-purple-400 font-bold mb-1">{c.points} 點</div>
+                  <button 
+                    onClick={() => handleAssistantAddPoint(c.id, 1)} 
+                    className="w-full py-1.5 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-lg font-bold text-sm transition-colors active:scale-95"
+                  >
+                    + 1 分
+                  </button>
                 </div>
               ))}
             </div>
