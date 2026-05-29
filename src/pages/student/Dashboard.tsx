@@ -16,12 +16,8 @@ export default function StudentDashboard() {
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isBidding, setIsBidding] = useState(false);
   
-  // 預先定義好的可愛頭像 Seed (使用 micah 風格，較有質感)
-  const AVATAR_SEEDS = [
-    "Mimi", "Bella", "Daisy", "Luna", "Cleo", "Felix", "Leo", "Milo",
-    "Nala", "Oliver", "Simba", "Chloe", "Toby", "Oreo", "Jasper",
-    "Lily", "Zoe", "Sam", "Loki", "Max", "Buddy", "Lucy", "Penny", "Coco"
-  ];
+  // 使用裁切好的 12 張小怪獸圖片
+  const AVATAR_URLS = Array.from({ length: 12 }, (_, i) => `/avatars/avatar_${i + 1}.png`);
   
   const navigate = useNavigate();
 
@@ -81,13 +77,12 @@ export default function StudentDashboard() {
     setIsAvatarModalOpen(true);
   };
 
-  const handleSelectAvatar = async (seed: string) => {
+  const handleSelectAvatar = async (url: string) => {
     if (!student) return;
     setIsChangingAvatar(true);
-    const newAvatarUrl = `https://api.dicebear.com/7.x/micah/svg?seed=${seed}`;
     
     try {
-      await updateDoc(doc(db, 'students', student.id), { avatarUrl: newAvatarUrl });
+      await updateDoc(doc(db, 'students', student.id), { avatarUrl: url });
       setIsAvatarModalOpen(false);
     } catch (error) {
       console.error('更換頭像失敗:', error);
@@ -366,18 +361,17 @@ export default function StudentDashboard() {
               </div>
 
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                {AVATAR_SEEDS.map((seed) => {
-                  const url = `https://api.dicebear.com/7.x/micah/svg?seed=${seed}`;
+                {AVATAR_URLS.map((url) => {
                   const isSelected = student.avatarUrl === url;
                   return (
                     <div 
-                      key={seed}
-                      onClick={() => handleSelectAvatar(seed)}
+                      key={url}
+                      onClick={() => handleSelectAvatar(url)}
                       className={`relative cursor-pointer rounded-2xl overflow-hidden border-4 transition-all hover:scale-105 active:scale-95 ${
                         isSelected ? 'border-purple-500 shadow-lg shadow-purple-500/30' : 'border-transparent hover:border-purple-200 dark:hover:border-purple-800 bg-gray-50 dark:bg-gray-800'
                       }`}
                     >
-                      <img src={url} alt={seed} className="w-full h-auto aspect-square object-contain p-2" />
+                      <img src={url} alt="Avatar" className="w-full h-auto aspect-square object-contain p-2 drop-shadow-md" />
                       {isSelected && (
                         <div className="absolute inset-0 bg-purple-500/10 flex items-center justify-center">
                         </div>
