@@ -5,6 +5,7 @@ import { db } from '../../lib/firebase';
 import type { Student, AuctionItem } from '../../types';
 import { LogOut, Gift, Star, RefreshCw, Trophy, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { playAddPointSound } from '../../utils/audio';
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState<Student | null>(null);
@@ -86,6 +87,7 @@ export default function StudentDashboard() {
   const handleAssistantAddPoint = async (targetStudentId: string, pts: number) => {
     if (!student?.isAssistant) return;
     try {
+      playAddPointSound(); // 播放音效
       await updateDoc(doc(db, 'students', targetStudentId), {
         points: increment(pts)
       });

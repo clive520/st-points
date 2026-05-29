@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Star, TrendingUp, TrendingDown, Users } from 'lucide-react';
-import { collection, query, where, getDocs, doc, updateDoc, orderBy, increment } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, orderBy, increment, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import type { ClassData, Student } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAuth } from 'firebase/auth';
+import confetti from 'canvas-confetti';
+import { playAddPointSound, playSubPointSound } from '../../utils/audio';
+import { useRef } from 'react';
 
 export default function PointsManager() {
   const [classes, setClasses] = useState<ClassData[]>([]);
@@ -17,6 +20,9 @@ export default function PointsManager() {
   // 加扣點 Modal 狀態
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isPointModalOpen, setIsPointModalOpen] = useState(false);
+
+  const prevPointsRef = useRef<Record<string, number>>({});
+  const [animatingStudentId, setAnimatingStudentId] = useState<string | null>(null);
 
   // 1. 取得班級列表
   useEffect(() => {
@@ -40,27 +46,69 @@ export default function PointsManager() {
     fetchClasses();
   }, [currentUser]);
 
-  // 2. 當班級改變時，取得該班學生
+  // 2. 當班級改變時，取得該班學生 (改為即時監聽)
   useEffect(() => {
     if (!selectedClassId) return;
-    const fetchStudents = async () => {
-      const q = query(collection(db, 'students'), where('classId', '==', selectedClassId));
-      const snapshot = await getDocs(q);
+    
+    let isInitialLoad = true;
+
+    const q = query(collection(db, 'students'), where('classId', '==', selectedClassId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Student[];
       data.sort((a, b) => a.seatNumber - b.seatNumber);
+      
+      if (!isInitialLoad) {
+        data.forEach(student => {
+          const prevPoints = prevPointsRef.current[student.id];
+          if (prevPoints !== undefined) {
+            if (student.points > prevPoints) {
+              // 分數增加
+              playAddPointSound();
+              setAnimatingStudentId(student.id);
+              
+              // 發射煙火
+              const el = document.getElementById(`student-card-${student.id}`);
+              if (el) {
+                const rect = el.getBoundingClientRect();
+                const x = (rect.left + rect.width / 2) / window.innerWidth;
+                const y = (rect.top + rect.height / 2) / window.innerHeight;
+                
+                confetti({
+                  particleCount: 40,
+                  spread: 60,
+                  origin: { x, y },
+                  colors: ['#a855f7', '#ec4899', '#eab308'],
+                  zIndex: 100
+                });
+              }
+              
+              setTimeout(() => setAnimatingStudentId(null), 1000);
+            } else if (student.points < prevPoints) {
+              // 分數減少
+              playSubPointSound();
+            }
+          }
+        });
+      }
+      
+      const newPointsMap: Record<string, number> = {};
+      data.forEach(s => {
+        newPointsMap[s.id] = s.points;
+      });
+      prevPointsRef.current = newPointsMap;
+      
       setStudents(data);
-    };
-    fetchStudents();
+      isInitialLoad = false;
+    });
+
+    return () => unsubscribe();
   }, [selectedClassId]);
 
   // 3. 處理加扣點邏輯
   const handleUpdatePoints = async (amount: number) => {
     if (!selectedStudent) return;
     
-    // 樂觀更新 (Optimistic Update)
-    setStudents(prev => prev.map(s => 
-      s.id === selectedStudent.id ? { ...s, points: s.points + amount } : s
-    ));
+    // 關閉 Modal，依賴 onSnapshot 來更新資料與觸發音效
     setIsPointModalOpen(false);
 
     try {
@@ -122,12 +170,25 @@ export default function PointsManager() {
               whileHover={{ y: -5 }}
               whileTap={{ scale: 0.95 }}
               key={student.id}
+              id={`student-card-${student.id}`}
               onClick={() => {
                 setSelectedStudent(student);
                 setIsPointModalOpen(true);
               }}
-              className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm hover:shadow-lg border border-gray-100 dark:border-gray-800 cursor-pointer flex flex-col items-center gap-3 transition-shadow"
+              className={`relative bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm hover:shadow-lg border cursor-pointer flex flex-col items-center gap-3 transition-all duration-300 ${
+                animatingStudentId === student.id 
+                  ? 'border-purple-400 dark:border-purple-500 shadow-purple-500/30' 
+                  : 'border-gray-100 dark:border-gray-800'
+              }`}
             >
+              {animatingStudentId === student.id && (
+                <motion.div 
+                  initial={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: 0, scale: 1.5 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 bg-purple-400/20 rounded-2xl pointer-events-none"
+                />
+              )}
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 flex items-center justify-center overflow-hidden border-2 border-transparent hover:border-purple-300 transition-colors">
                 <img src={student.avatarUrl} alt={student.name} className="w-14 h-14" />
               </div>
