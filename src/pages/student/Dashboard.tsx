@@ -13,7 +13,15 @@ export default function StudentDashboard() {
   const [auctionItems, setAuctionItems] = useState<AuctionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChangingAvatar, setIsChangingAvatar] = useState(false);
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isBidding, setIsBidding] = useState(false);
+  
+  // 預先定義好的可愛頭像 Seed (使用 micah 風格，較有質感)
+  const AVATAR_SEEDS = [
+    "Mimi", "Bella", "Daisy", "Luna", "Cleo", "Felix", "Leo", "Milo",
+    "Nala", "Oliver", "Simba", "Chloe", "Toby", "Oreo", "Jasper",
+    "Lily", "Zoe", "Sam", "Loki", "Max", "Buddy", "Lucy", "Penny", "Coco"
+  ];
   
   const navigate = useNavigate();
 
@@ -69,16 +77,21 @@ export default function StudentDashboard() {
     navigate('/login');
   };
 
-  const handleChangeAvatar = async () => {
+  const openAvatarModal = () => {
+    setIsAvatarModalOpen(true);
+  };
+
+  const handleSelectAvatar = async (seed: string) => {
     if (!student) return;
     setIsChangingAvatar(true);
-    const randomSeed = Math.random().toString(36).substring(7);
-    const newAvatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${student.name}_${randomSeed}`;
+    const newAvatarUrl = `https://api.dicebear.com/7.x/micah/svg?seed=${seed}`;
     
     try {
       await updateDoc(doc(db, 'students', student.id), { avatarUrl: newAvatarUrl });
+      setIsAvatarModalOpen(false);
     } catch (error) {
       console.error('更換頭像失敗:', error);
+      alert('更換頭像失敗');
     }
     setIsChangingAvatar(false);
   };
@@ -166,7 +179,7 @@ export default function StudentDashboard() {
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative group cursor-pointer" onClick={handleChangeAvatar} title="點擊更換頭像">
+            <div className="relative group cursor-pointer" onClick={openAvatarModal} title="點擊更換頭像">
               <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center overflow-hidden border-2 border-purple-200 group-hover:border-purple-400 transition-colors">
                 <img src={student.avatarUrl} alt={student.name} />
               </div>
@@ -335,6 +348,57 @@ export default function StudentDashboard() {
           )}
         </motion.div>
       </main>
+
+      {/* 頭像選擇 Modal */}
+      <AnimatePresence>
+        {isAvatarModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setIsAvatarModalOpen(false)}>
+            <motion.div 
+              initial={{ opacity: 0, y: 50, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
+            >
+              <div className="text-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">選擇你喜歡的頭像</h3>
+                <p className="text-gray-500 text-sm mt-1">選一個最能代表你的可愛圖片吧！</p>
+              </div>
+
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+                {AVATAR_SEEDS.map((seed) => {
+                  const url = `https://api.dicebear.com/7.x/micah/svg?seed=${seed}`;
+                  const isSelected = student.avatarUrl === url;
+                  return (
+                    <div 
+                      key={seed}
+                      onClick={() => handleSelectAvatar(seed)}
+                      className={`relative cursor-pointer rounded-2xl overflow-hidden border-4 transition-all hover:scale-105 active:scale-95 ${
+                        isSelected ? 'border-purple-500 shadow-lg shadow-purple-500/30' : 'border-transparent hover:border-purple-200 dark:hover:border-purple-800 bg-gray-50 dark:bg-gray-800'
+                      }`}
+                    >
+                      <img src={url} alt={seed} className="w-full h-auto aspect-square object-contain p-2" />
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-purple-500/10 flex items-center justify-center">
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 flex justify-center">
+                <button 
+                  onClick={() => setIsAvatarModalOpen(false)}
+                  className="px-6 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-colors"
+                >
+                  取消
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
