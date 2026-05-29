@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Gift, Play, Square, Trash2, Image as ImageIcon, Plus } from 'lucide-react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../lib/firebase';
 import type { AuctionItem, ClassData } from '../../types';
+import { compressImage } from '../../utils/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAuth } from 'firebase/auth';
 
@@ -15,7 +17,6 @@ export default function AuctionManager() {
   const auth = getAuth();
   const currentUser = auth.currentUser;
   
-  // 新增物品狀態
   const [newItem, setNewItem] = useState({
     name: '',
     description: '',
@@ -23,6 +24,12 @@ export default function AuctionManager() {
     quantity: 1,
     imageUrl: ''
   });
+  
+  // 圖片上傳狀態
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // 1. 取得班級列表
   useEffect(() => {
@@ -70,18 +77,57 @@ export default function AuctionManager() {
     e.preventDefault();
     if (!newItem.name.trim() || !selectedClassId) return;
     
+    setIsUploading(true);
     try {
+      let finalImageUrl = newItem.imageUrl;
+      
+      // 如果有選擇檔案，則進行壓縮與上傳
+      if (selectedFile) {
+        const compressedBlob = await compressImage(selectedFile, 600);
+        
+        // 產生唯一檔名
+        const fileName = `auctions/${Date.now()}_${Math.random().toString(36).substring(2)}.jpg`;
+        const storageRef = ref(storage, fileName);
+        
+        // 開始上傳
+        const uploadTask = uploadBytesResumable(storageRef, compressedBlob);
+        
+        finalImageUrl = await new Promise((resolve, reject) => {
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            },
+            (error) => reject(error),
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve(downloadURL);
+            }
+          );
+        });
+      }
+
       await addDoc(collection(db, 'auctionItems'), {
         ...newItem,
+        imageUrl: finalImageUrl,
         status: 'pending',
         currentHighestBid: 0,
         currentHighestBidderId: null,
+        classId: selectedClassId
       });
+      
       setIsModalOpen(false);
       setNewItem({ name: '', description: '', startingPrice: 10, quantity: 1, imageUrl: '' });
+      setSelectedFile(null);
+      setPreviewUrl('');
+      setUploadProgress(0);
       fetchItems();
     } catch (error) {
       console.error('新增物品失敗:', error);
+      alert('上傳失敗，請確認 Firebase Storage 權限設定是否正確。');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -242,16 +288,76 @@ export default function AuctionManager() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">起標價 (點數)</label>
-                    <input type="number" min="1" required value={newItem.startingPrice} onChange={e => setNewItem({...newItem, startingPrice: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500" />
+                    <input type="number" min="1" required value={newItem.startingPrice} onChange={e => setNewItem({...newItem, startingPrice: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500" disabled={isUploading} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">數量</label>
-                    <input type="number" min="1" required value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500" />
+                    <input type="number" min="1" required value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: parseInt(e.target.value)})} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500" disabled={isUploading} />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">物品圖片上傳</label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-xl relative overflow-hidden">
+                    {previewUrl ? (
+                      <div className="absolute inset-0">
+                        <img src={previewUrl} alt="Preview" className="w-full h-full object-cover opacity-50" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setSelectedFile(null);
+                              setPreviewUrl('');
+                            }}
+                            className="bg-black/50 text-white px-4 py-2 rounded-lg hover:bg-black/70 transition"
+                            disabled={isUploading}
+                          >
+                            移除圖片
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-center">
+                        <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
+                        <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
+                          <label className="relative cursor-pointer bg-transparent rounded-md font-medium text-pink-600 hover:text-pink-500 focus-within:outline-none">
+                            <span>點擊選擇圖片</span>
+                            <input 
+                              type="file" 
+                              className="sr-only" 
+                              accept="image/*"
+                              disabled={isUploading}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setSelectedFile(file);
+                                  setPreviewUrl(URL.createObjectURL(file));
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-500">上傳後將自動為您等比例壓縮至 600 像素</p>
+                      </div>
+                    )}
+                  </div>
+                  {isUploading && uploadProgress > 0 && (
+                    <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                      <div className="bg-pink-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-3 pt-4 mt-4 border-t border-gray-100 dark:border-gray-800">
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition">取消</button>
-                  <button type="submit" className="flex-1 py-3 bg-pink-600 text-white font-medium rounded-xl hover:bg-pink-700 transition shadow-md">上架物品</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition" disabled={isUploading}>取消</button>
+                  <button type="submit" className="flex-1 py-3 bg-pink-600 text-white font-medium rounded-xl hover:bg-pink-700 transition shadow-md flex justify-center items-center gap-2" disabled={isUploading}>
+                    {isUploading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        處理中...
+                      </>
+                    ) : (
+                      '上架物品'
+                    )}
+                  </button>
                 </div>
               </form>
             </motion.div>
