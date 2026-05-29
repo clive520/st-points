@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Gift, Play, Square, Trash2, Image as ImageIcon, Plus } from 'lucide-react';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import type { AuctionItem } from '../../types';
+import type { AuctionItem, ClassData } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getAuth } from 'firebase/auth';
 
 export default function AuctionManager() {
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [items, setItems] = useState<AuctionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
   
   // 新增物品狀態
   const [newItem, setNewItem] = useState({
@@ -16,12 +21,36 @@ export default function AuctionManager() {
     description: '',
     startingPrice: 10,
     quantity: 1,
+    imageUrl: ''
   });
 
+  // 1. 取得班級列表
+  useEffect(() => {
+    const fetchClasses = async () => {
+      if (!currentUser) return;
+      const q = query(collection(db, 'classes'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as ClassData[];
+      
+      const filtered = data.filter(c => 
+        c.ownerId === currentUser.uid || 
+        (c.coTeacherEmails && currentUser.email && c.coTeacherEmails.includes(currentUser.email))
+      );
+      setClasses(filtered);
+      
+      if (filtered.length > 0) {
+        setSelectedClassId(filtered[0].id);
+      }
+      setIsLoading(false);
+    };
+    fetchClasses();
+  }, [currentUser]);
+
   const fetchItems = async () => {
+    if (!selectedClassId) return;
     setIsLoading(true);
     try {
-      const q = query(collection(db, 'auctionItems')); // 若需排序可加 createdAt
+      const q = query(collection(db, 'auctionItems'), where('classId', '==', selectedClassId));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as AuctionItem[];
       setItems(data);
@@ -32,12 +61,14 @@ export default function AuctionManager() {
   };
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    if (selectedClassId) {
+      fetchItems();
+    }
+  }, [selectedClassId]);
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.name.trim()) return;
+    if (!newItem.name.trim() || !selectedClassId) return;
     
     try {
       await addDoc(collection(db, 'auctionItems'), {
@@ -47,7 +78,7 @@ export default function AuctionManager() {
         currentHighestBidderId: null,
       });
       setIsModalOpen(false);
-      setNewItem({ name: '', description: '', startingPrice: 10, quantity: 1 });
+      setNewItem({ name: '', description: '', startingPrice: 10, quantity: 1, imageUrl: '' });
       fetchItems();
     } catch (error) {
       console.error('新增物品失敗:', error);
@@ -79,12 +110,24 @@ export default function AuctionManager() {
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
           <Gift className="text-pink-500" /> 拍賣管理
         </h2>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white font-medium rounded-xl hover:bg-pink-700 transition shadow-sm"
-        >
-          <Plus size={18} /> 新增物品
-        </button>
+        <div className="flex gap-4">
+          <select
+            value={selectedClassId}
+            onChange={(e) => setSelectedClassId(e.target.value)}
+            className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500 text-gray-700 dark:text-gray-300 shadow-sm"
+          >
+            {classes.length === 0 && <option value="">無班級</option>}
+            {classes.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white font-medium rounded-xl hover:bg-pink-700 transition shadow-sm"
+          >
+            <Plus size={18} /> 新增物品
+          </button>
+        </div>
       </div>
 
       {isLoading ? (

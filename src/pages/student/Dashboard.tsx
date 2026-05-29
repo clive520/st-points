@@ -1,39 +1,47 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAuth, signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, updateDoc, runTransaction } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, runTransaction, getDocs, increment } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import type { Student, AuctionItem } from '../../types';
-import { LogOut, Gift, Star, RefreshCw, Trophy } from 'lucide-react';
+import { LogOut, Gift, Star, RefreshCw, Trophy, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function StudentDashboard() {
   const [student, setStudent] = useState<Student | null>(null);
+  const [classmates, setClassmates] = useState<Student[]>([]);
   const [auctionItems, setAuctionItems] = useState<AuctionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isChangingAvatar, setIsChangingAvatar] = useState(false);
   const [isBidding, setIsBidding] = useState(false);
   
-  const auth = getAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) {
-      navigate('/');
+    const studentAuthId = localStorage.getItem('studentAuthId');
+    const studentClassId = localStorage.getItem('studentClassId');
+
+    if (!studentAuthId || !studentClassId) {
+      navigate('/login');
       return;
     }
 
-    // 監聽學生即時點數
-    const qStudent = query(collection(db, 'students'), where('authUid', '==', user.uid));
-    const unsubStudent = onSnapshot(qStudent, (snapshot) => {
-      if (!snapshot.empty) {
-        setStudent({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Student);
+    // 監聽自己的資料
+    const unsubStudent = onSnapshot(doc(db, 'students', studentAuthId), (docSnap) => {
+      if (docSnap.exists()) {
+        const s = { id: docSnap.id, ...docSnap.data() } as Student;
+        setStudent(s);
+        
+        // 如果是小老師，順便抓取全班同學資料
+        if (s.isAssistant) {
+          fetchClassmates(s.classId);
+        }
+      } else {
+        handleLogout(); // 資料被刪除則登出
       }
       setIsLoading(false);
     });
 
-    // 監聽正在拍賣中的物品
+    // 監聽拍賣
     const qAuctions = query(collection(db, 'auctionItems'), where('status', '==', 'active'));
     const unsubAuctions = onSnapshot(qAuctions, (snapshot) => {
       const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as AuctionItem[];
@@ -44,11 +52,20 @@ export default function StudentDashboard() {
       unsubStudent();
       unsubAuctions();
     };
-  }, [auth, navigate]);
+  }, [navigate]);
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    navigate('/');
+  const fetchClassmates = async (classId: string) => {
+    const q = query(collection(db, 'students'), where('classId', '==', classId));
+    const snapshot = await getDocs(q);
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Student[];
+    data.sort((a, b) => a.seatNumber - b.seatNumber);
+    setClassmates(data);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('studentAuthId');
+    localStorage.removeItem('studentClassId');
+    navigate('/login');
   };
 
   const handleChangeAvatar = async () => {
@@ -65,10 +82,24 @@ export default function StudentDashboard() {
     setIsChangingAvatar(false);
   };
 
+  // 小老師幫同學加分
+  const handleAssistantAddPoint = async (targetStudentId: string, pts: number) => {
+    if (!student?.isAssistant) return;
+    try {
+      await updateDoc(doc(db, 'students', targetStudentId), {
+        points: increment(pts)
+      });
+      // 由於同學列表不會即時更新 (沒寫 onSnapshot)，我們手動重新整理一下同學列表
+      fetchClassmates(student.classId);
+    } catch (error) {
+      console.error(error);
+      alert('加分失敗');
+    }
+  };
+
   const handleBid = async (item: AuctionItem) => {
     if (!student || isBidding) return;
     
-    // 每次加價預設為 10 點
     const bidIncrement = 10;
     const requiredBid = item.currentHighestBid ? item.currentHighestBid + bidIncrement : item.startingPrice;
     
@@ -102,7 +133,6 @@ export default function StudentDashboard() {
           throw new Error("點數不足！");
         }
 
-        // 處理前一位最高出價者的退款 (解凍)
         if (currentItem.currentHighestBidderId) {
           const prevBidderRef = doc(db, 'students', currentItem.currentHighestBidderId);
           const prevBidderDoc = await transaction.get(prevBidderRef);
@@ -112,17 +142,13 @@ export default function StudentDashboard() {
           }
         }
 
-        // 扣除目前出價者的點數 (凍結)
         transaction.update(studentRef, { points: currentStudent.points - actualRequiredBid });
-        
-        // 更新物品最高出價資訊
         transaction.update(itemRef, {
           currentHighestBid: actualRequiredBid,
           currentHighestBidderId: student.id,
           currentHighestBidderName: currentStudent.name
         });
       });
-      // 成功不特別顯示，畫面會即時更新
     } catch (error: any) {
       console.error(error);
       alert("出價失敗：" + error.message);
@@ -130,10 +156,7 @@ export default function StudentDashboard() {
     setIsBidding(false);
   };
 
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">載入中...</div>;
-  }
-
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">載入中...</div>;
   if (!student) return null;
 
   return (
@@ -141,7 +164,7 @@ export default function StudentDashboard() {
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="relative group cursor-pointer" onClick={handleChangeAvatar}>
+            <div className="relative group cursor-pointer" onClick={handleChangeAvatar} title="點擊更換頭像">
               <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center overflow-hidden border-2 border-purple-200 group-hover:border-purple-400 transition-colors">
                 <img src={student.avatarUrl} alt={student.name} />
               </div>
@@ -149,7 +172,17 @@ export default function StudentDashboard() {
                 <RefreshCw size={16} className={`text-white ${isChangingAvatar ? 'animate-spin' : ''}`} />
               </div>
             </div>
-            <div className="font-bold text-gray-800 dark:text-gray-100 text-lg">{student.name}</div>
+            <div>
+              <div className="font-bold text-gray-800 dark:text-gray-100 text-lg flex items-center gap-2">
+                {student.name}
+                {student.isAssistant && (
+                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-md flex items-center gap-1 font-medium">
+                    <ShieldCheck size={12} /> 小老師
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500">座號 {student.seatNumber}</div>
+            </div>
           </div>
           <button onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
             <LogOut size={20} />
@@ -158,6 +191,32 @@ export default function StudentDashboard() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+        {/* 小老師加分區塊 */}
+        {student.isAssistant && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-yellow-50 dark:bg-yellow-900/20 rounded-3xl p-6 shadow-sm border border-yellow-200 dark:border-yellow-800"
+          >
+            <div className="flex items-center gap-2 mb-4 text-yellow-800 dark:text-yellow-500 font-bold">
+              <ShieldCheck /> 小老師任務：幫同學加分
+            </div>
+            <div className="flex overflow-x-auto gap-4 pb-4 snap-x">
+              {classmates.filter(c => c.id !== student.id).map(c => (
+                <div key={c.id} className="min-w-[140px] snap-start bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-yellow-100 dark:border-yellow-900/50 flex flex-col items-center gap-2">
+                  <img src={c.avatarUrl} alt={c.name} className="w-12 h-12 rounded-full bg-gray-100" />
+                  <div className="text-sm font-bold text-gray-800 dark:text-gray-100">{c.name}</div>
+                  <div className="text-xs text-purple-600 dark:text-purple-400 font-bold mb-2">{c.points} 點</div>
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    <button onClick={() => handleAssistantAddPoint(c.id, 1)} className="py-1 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg font-bold text-xs">+1</button>
+                    <button onClick={() => handleAssistantAddPoint(c.id, 5)} className="py-1 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg font-bold text-xs">+5</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -4,12 +4,15 @@ import { collection, query, where, getDocs, doc, updateDoc, orderBy, increment }
 import { db } from '../../lib/firebase';
 import type { ClassData, Student } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getAuth } from 'firebase/auth';
 
 export default function PointsManager() {
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
 
   // 加扣點 Modal 狀態
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
@@ -18,17 +21,24 @@ export default function PointsManager() {
   // 1. 取得班級列表
   useEffect(() => {
     const fetchClasses = async () => {
+      if (!currentUser) return;
       const q = query(collection(db, 'classes'), orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as ClassData[];
-      setClasses(data);
-      if (data.length > 0) {
-        setSelectedClassId(data[0].id);
+      
+      const filtered = data.filter(c => 
+        c.ownerId === currentUser.uid || 
+        (c.coTeacherEmails && currentUser.email && c.coTeacherEmails.includes(currentUser.email))
+      );
+      setClasses(filtered);
+      
+      if (filtered.length > 0) {
+        setSelectedClassId(filtered[0].id);
       }
       setIsLoading(false);
     };
     fetchClasses();
-  }, []);
+  }, [currentUser]);
 
   // 2. 當班級改變時，取得該班學生
   useEffect(() => {

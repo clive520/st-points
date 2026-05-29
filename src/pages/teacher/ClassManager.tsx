@@ -6,23 +6,36 @@ import { db } from '../../lib/firebase';
 import type { ClassData } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { getAuth } from 'firebase/auth';
+
 export default function ClassManager() {
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
 
   const fetchClasses = async () => {
+    if (!currentUser) return;
     setIsLoading(true);
     try {
+      // 由於 Firestore 的限制，我們需要拆成兩次查詢或全部抓取後在前端過濾。
+      // 為了簡單起見，我們先全部抓取（或是只抓取符合條件的），這裡採用全部抓取後在前端過濾，以避免複雜的複合索引。
       const q = query(collection(db, 'classes'), orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data()
       })) as ClassData[];
-      setClasses(data);
+      
+      const filtered = data.filter(c => 
+        c.ownerId === currentUser.uid || 
+        (c.coTeacherEmails && currentUser.email && c.coTeacherEmails.includes(currentUser.email))
+      );
+      
+      setClasses(filtered);
     } catch (error) {
       console.error('讀取班級失敗:', error);
     }
@@ -31,14 +44,16 @@ export default function ClassManager() {
 
   useEffect(() => {
     fetchClasses();
-  }, []);
+  }, [currentUser]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClassName.trim()) return;
+    if (!newClassName.trim() || !currentUser) return;
     try {
       await addDoc(collection(db, 'classes'), {
         name: newClassName.trim(),
+        ownerId: currentUser.uid,
+        coTeacherEmails: [],
         createdAt: Date.now()
       });
       setNewClassName('');

@@ -1,5 +1,7 @@
-import { Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Users, Star, Gift, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import { Users, Star, Gift, Settings, LogOut } from 'lucide-react';
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import ClassManager from './ClassManager';
 import ClassDetails from './ClassDetails';
 import PointsManager from './PointsManager';
@@ -14,6 +16,29 @@ const navItems = [
 
 export default function TeacherDashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const auth = getAuth();
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        navigate('/teacher/login');
+      } else {
+        setIsAuthChecking(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [auth, navigate]);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate('/teacher/login');
+  };
+
+  if (isAuthChecking) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">驗證中...</div>;
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-950">
@@ -44,6 +69,17 @@ export default function TeacherDashboard() {
             );
           })}
         </nav>
+        
+        {/* Logout Button */}
+        <div className="p-4 border-t border-gray-100 dark:border-gray-800">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 w-full text-left rounded-xl transition-all duration-200 text-gray-600 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+          >
+            <LogOut size={20} />
+            <span>登出系統</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}

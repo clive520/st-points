@@ -1,21 +1,24 @@
-// 學生資料結構
-export interface Student {
-  id: string; // Firebase Document ID
-  name: string;
-  seatNumber: number;
-  classId: string;
-  points: number; // 總點數
-  avatarUrl?: string; // 頭像網址
-}
-
-// 班級資料結構
 export interface ClassData {
   id: string; // Firebase Document ID
   name: string;
+  ownerId?: string; // 班級建立者的 Firebase Auth UID
+  coTeacherEmails?: string[]; // 共同管理的老師信箱清單
   createdAt: number;
 }
 
-// 拍賣物品資料結構
+export interface Student {
+  id: string; // Firebase Document ID
+  classId: string;
+  name: string;
+  seatNumber: number;
+  gender?: '男' | '女'; // 新增性別
+  password?: string; // 新增直接驗證密碼
+  points: number; // 總點數
+  avatarUrl: string; // 頭像網址
+  authUid?: string; // 保留供未來需要，或向下相容
+  isAssistant?: boolean; // 是否為加分小老師
+}
+
 export interface AuctionItem {
   id: string; // Firebase Document ID
   name: string;
@@ -27,13 +30,4 @@ export interface AuctionItem {
   currentHighestBidderId?: string;
   currentHighestBidderName?: string;
   status: 'pending' | 'active' | 'ended'; // 拍賣狀態
-}
-
-// 競標紀錄資料結構
-export interface Bid {
-  id: string;
-  itemId: string;
-  studentId: string;
-  amount: number;
-  timestamp: number;
 }

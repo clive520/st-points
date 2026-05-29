@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { db } from '../../lib/firebase';
 import type { ClassData, Student } from '../../types';
 import { motion } from 'framer-motion';
@@ -17,7 +16,6 @@ export default function StudentLogin() {
   const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
-  const auth = getAuth();
 
   // 取得班級列表
   useEffect(() => {
@@ -58,17 +56,21 @@ export default function StudentLogin() {
 
     setIsLoading(true);
     const student = students.find(s => s.id === selectedStudentId);
-    if (!student) return;
-
-    const dummyEmail = `student_${selectedClassId}_${student.seatNumber}@st-points.app`;
     
-    try {
-      await signInWithEmailAndPassword(auth, dummyEmail, password);
-      // 登入成功，跳轉至學生儀表板
+    if (!student) {
+      setError('找不到該學生資料');
+      setIsLoading(false);
+      return;
+    }
+
+    // 免 Auth 驗證機制：直接比對資料庫儲存的密碼
+    if (student.password === password) {
+      // 登入成功，將資訊存入 localStorage
+      localStorage.setItem('studentAuthId', student.id);
+      localStorage.setItem('studentClassId', student.classId);
       navigate('/student/dashboard');
-    } catch (err: any) {
-      console.error(err);
-      setError('密碼錯誤或登入失敗，請重試！');
+    } else {
+      setError('密碼錯誤，請重新輸入！');
       setIsLoading(false);
     }
   };
