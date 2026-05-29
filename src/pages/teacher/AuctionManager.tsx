@@ -273,7 +273,7 @@ export default function AuctionManager() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-md shadow-2xl"
+              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">新增拍賣物品</h3>
               <form onSubmit={handleCreateItem} className="space-y-4">
