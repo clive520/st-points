@@ -286,7 +286,14 @@ export default function StudentDashboard() {
           ) : (
             <div className="space-y-4">
               <AnimatePresence>
-                {auctionItems.map(item => {
+                {auctionItems
+                  .slice()
+                  .sort((a, b) => {
+                    const aWinning = a.currentHighestBidderId === student.id ? 1 : 0;
+                    const bWinning = b.currentHighestBidderId === student.id ? 1 : 0;
+                    return bWinning - aWinning;
+                  })
+                  .map(item => {
                   const isWinning = item.currentHighestBidderId === student.id;
                   const nextBid = item.currentHighestBid ? item.currentHighestBid + 1 : item.startingPrice;
                   const canAfford = student.points >= nextBid;
