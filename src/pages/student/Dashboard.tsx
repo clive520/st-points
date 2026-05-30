@@ -53,9 +53,21 @@ export default function StudentDashboard() {
       setAuctionItems(items);
     });
 
+    // 監聽我的戰利品 (已結束且最高出價者是自己的)
+    const qWon = query(
+      collection(db, 'auctionItems'), 
+      where('status', '==', 'ended'),
+      where('currentHighestBidderId', '==', studentAuthId)
+    );
+    const unsubWon = onSnapshot(qWon, (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as AuctionItem[];
+      setWonItems(items);
+    });
+
     return () => {
       unsubStudent();
       unsubAuctions();
+      unsubWon();
     };
   }, [navigate]);
 
@@ -110,6 +122,7 @@ export default function StudentDashboard() {
   // 出價相關狀態
   const [biddingItem, setBiddingItem] = useState<AuctionItem | null>(null);
   const [bidAmount, setBidAmount] = useState<number>(0);
+  const [wonItems, setWonItems] = useState<AuctionItem[]>([]);
 
   const openBidModal = (item: AuctionItem) => {
     const minBid = item.currentHighestBid ? item.currentHighestBid + 1 : item.startingPrice;
@@ -370,6 +383,40 @@ export default function StudentDashboard() {
             </div>
           )}
         </motion.div>
+
+        {wonItems.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 bg-yellow-50 dark:bg-yellow-900/10 rounded-3xl p-6 shadow-sm border border-yellow-100 dark:border-yellow-800/30"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <Trophy className="text-yellow-500" />
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+                我的戰利品
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {wonItems.map(item => (
+                <div key={item.id} className="flex gap-4 p-4 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-yellow-100 dark:border-yellow-800/30">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.name} className="w-20 h-20 rounded-xl object-cover" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                      <Gift className="text-gray-300" size={32} />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <div className="font-bold text-lg text-gray-900 dark:text-gray-100 mb-1">{item.name}</div>
+                    <div className="text-sm text-yellow-600 dark:text-yellow-500 font-bold mb-1">得標價：{item.currentHighestBid} 點</div>
+                    <div className="text-xs text-gray-500">恭喜得標！</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
       </main>
 
       {/* 出價 Modal */}
