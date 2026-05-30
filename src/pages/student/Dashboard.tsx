@@ -288,6 +288,8 @@ export default function StudentDashboard() {
               <AnimatePresence>
                 {auctionItems.map(item => {
                   const isWinning = item.currentHighestBidderId === student.id;
+                  const nextBid = item.currentHighestBid ? item.currentHighestBid + 1 : item.startingPrice;
+                  const canAfford = student.points >= nextBid;
                   
                   return (
                     <motion.div 
@@ -336,14 +338,16 @@ export default function StudentDashboard() {
                             
                             <button 
                               onClick={() => openBidModal(item)}
-                              disabled={isWinning || isBidding}
+                              disabled={isWinning || isBidding || !canAfford}
                               className={`px-6 py-2.5 rounded-xl font-bold transition transform active:scale-95 ${
                                 isWinning 
                                   ? 'bg-yellow-400 text-yellow-900 opacity-80 cursor-not-allowed'
-                                  : 'bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-500/30 hover:scale-[1.02]'
+                                  : !canAfford
+                                    ? 'bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
+                                    : 'bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-500/30 hover:scale-[1.02]'
                               }`}
                             >
-                              我要出價
+                              {!canAfford && !isWinning ? '點數不足' : '我要出價'}
                             </button>
                           </div>
                         </div>
@@ -382,18 +386,23 @@ export default function StudentDashboard() {
                 </label>
                 <div className="flex items-center gap-2">
                   <button 
-                    onClick={() => setBidAmount(prev => Math.max((biddingItem.currentHighestBid || biddingItem.startingPrice - 1) + 1, prev - 10))}
-                    className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 font-bold flex items-center justify-center"
+                    onClick={() => setBidAmount(prev => Math.max((biddingItem.currentHighestBid || biddingItem.startingPrice - 1) + 1, prev - 1))}
+                    className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 font-bold flex items-center justify-center disabled:opacity-50"
                   >-</button>
                   <input 
                     type="number"
                     value={bidAmount}
-                    onChange={(e) => setBidAmount(parseInt(e.target.value) || 0)}
+                    onChange={(e) => {
+                      let val = parseInt(e.target.value) || 0;
+                      // 不讓使用者輸入超過可用點數
+                      if (val > student.points) val = student.points;
+                      setBidAmount(val);
+                    }}
                     className="flex-1 text-center px-4 py-3 text-2xl font-black text-pink-600 dark:text-pink-400 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <button 
-                    onClick={() => setBidAmount(prev => prev + 10)}
-                    className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 font-bold flex items-center justify-center"
+                    onClick={() => setBidAmount(prev => Math.min(student.points, prev + 1))}
+                    className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 font-bold flex items-center justify-center disabled:opacity-50"
                   >+</button>
                 </div>
                 {bidAmount > student.points && (
