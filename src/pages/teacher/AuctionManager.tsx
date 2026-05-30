@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Gift, Play, Square, Trash2, Image as ImageIcon, Plus } from 'lucide-react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../lib/firebase';
+import { db } from '../../lib/firebase';
 import type { AuctionItem, ClassData } from '../../types';
 import { compressImage } from '../../utils/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -81,31 +80,23 @@ export default function AuctionManager() {
     try {
       let finalImageUrl = newItem.imageUrl;
       
-      // 如果有選擇檔案，則進行壓縮與上傳
+      // 如果有選擇檔案，則進行壓縮並轉成 Base64 字串存入資料庫
       if (selectedFile) {
+        // 先顯示假進度
+        setUploadProgress(30);
         const compressedBlob = await compressImage(selectedFile, 600);
+        setUploadProgress(60);
         
-        // 產生唯一檔名
-        const fileName = `auctions/${Date.now()}_${Math.random().toString(36).substring(2)}.jpg`;
-        const storageRef = ref(storage, fileName);
-        
-        // 開始上傳
-        const uploadTask = uploadBytesResumable(storageRef, compressedBlob);
-        
-        finalImageUrl = await new Promise((resolve, reject) => {
-          uploadTask.on(
-            'state_changed',
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(progress);
-            },
-            (error) => reject(error),
-            async () => {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve(downloadURL);
-            }
-          );
+        // 將 Blob 轉為 Base64 字串 (Data URL)
+        finalImageUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            resolve(reader.result as string);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(compressedBlob);
         });
+        setUploadProgress(100);
       }
 
       await addDoc(collection(db, 'auctionItems'), {
