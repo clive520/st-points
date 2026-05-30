@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, Trash2, UserPlus, Star, Edit2 } from 'lucide-react';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, getDoc } from 'firebase/firestore';
+import { ArrowLeft, Upload, Trash2, UserPlus, Star, Edit2, ImagePlus } from 'lucide-react';
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../../lib/firebase';
-import type { Student, ClassData } from '../../types';
+import type { Student, ClassData, CustomAvatar } from '../../types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { compressImage } from '../../utils/image';
+import { useRef } from 'react';
 
 export default function ClassDetails() {
   const { classId } = useParams();
@@ -25,6 +27,11 @@ export default function ClassDetails() {
 
   const [isCoTeacherModalOpen, setIsCoTeacherModalOpen] = useState(false);
   const [coTeacherEmail, setCoTeacherEmail] = useState('');
+
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const [customAvatars, setCustomAvatars] = useState<CustomAvatar[]>([]);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   const auth = getAuth();
   const currentUser = auth.currentUser;
@@ -52,7 +59,65 @@ export default function ClassDetails() {
 
   useEffect(() => {
     fetchClassAndStudents();
+
+    if (!classId) return;
+    const qAvatars = query(collection(db, 'avatars'), where('classId', '==', classId));
+    const unsubAvatars = onSnapshot(qAvatars, (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as CustomAvatar[];
+      setCustomAvatars(items.sort((a, b) => b.createdAt - a.createdAt));
+    });
+
+    return () => unsubAvatars();
   }, [classId]);
+
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !classId) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const compressedBlob = await compressImage(file, 200);
+      const base64Url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(compressedBlob);
+      });
+
+      await addDoc(collection(db, 'avatars'), {
+        classId,
+        imageUrl: base64Url,
+        createdAt: Date.now()
+      });
+      
+    } catch (error) {
+      console.error('上傳頭像失敗', error);
+      alert('上傳頭像失敗');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDeleteAvatar = async (avatar: CustomAvatar) => {
+    // 檢查是否有學生正在使用
+    const isInUse = students.some(s => s.avatarUrl === avatar.imageUrl);
+    if (isInUse) {
+      alert('無法刪除：目前有學生正在使用此頭像！請先請學生更換頭像。');
+      return;
+    }
+    
+    if (!window.confirm('確定要刪除此自訂頭像嗎？')) return;
+    
+    try {
+      await deleteDoc(doc(db, 'avatars', avatar.id));
+    } catch (error) {
+      console.error('刪除頭像失敗', error);
+      alert('刪除頭像失敗');
+    }
+  };
 
   // 新版批次匯入 (免 Auth)
   const handleBatchImport = async () => {
@@ -215,16 +280,24 @@ export default function ClassDetails() {
         </h2>
         
         <div className="ml-auto flex flex-wrap gap-2">
-          {isOwner && (
+            {isOwner && (
+              <button 
+                onClick={() => setIsCoTeacherModalOpen(true)}
+                className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition"
+              >
+                <UserPlus size={18} />
+                共同管理老師
+              </button>
+            )}
             <button 
-              onClick={() => setIsCoTeacherModalOpen(true)}
-              className="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition shadow-sm"
+              onClick={() => setIsAvatarModalOpen(true)}
+              className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition"
             >
-              邀請教師
+              <ImagePlus size={18} />
+              頭像管理
             </button>
-          )}
-          <button 
-            onClick={handleResetPoints}
+            <button 
+              onClick={handleResetPoints}
             className="px-4 py-2 bg-amber-500 text-white font-medium rounded-xl hover:bg-amber-600 transition shadow-sm"
           >
             點數歸零
@@ -486,6 +559,64 @@ export default function ClassDetails() {
           </div>
         )}
       </AnimatePresence>
+      {/* 頭像管理 Modal */}
+      {isAvatarModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setIsAvatarModalOpen(false)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold text-gray-800">自訂頭像管理</h3>
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                ref={avatarFileInputRef}
+                onChange={handleUploadAvatar}
+              />
+              <button 
+                onClick={() => avatarFileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition disabled:opacity-50"
+              >
+                <Upload size={18} />
+                {isUploadingAvatar ? '上傳中...' : '新增頭像'}
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-500 mb-4">
+              您可以在此上傳班級專屬的自訂頭像，學生可在更換頭像時選擇它們。
+              若有學生正在使用該頭像，將無法刪除。
+            </p>
+
+            <div className="grid grid-cols-4 sm:grid-cols-6 gap-4">
+              {customAvatars.map(avatar => (
+                <div key={avatar.id} className="relative group">
+                  <div className="aspect-square rounded-2xl overflow-hidden border-2 border-gray-100 bg-gray-50 flex items-center justify-center p-2">
+                    <img src={avatar.imageUrl} alt="Custom Avatar" className="w-full h-full object-contain" />
+                  </div>
+                  <button
+                    onClick={() => handleDeleteAvatar(avatar)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+                    title="刪除頭像"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              {customAvatars.length === 0 && (
+                <div className="col-span-full py-8 text-center text-gray-400 bg-gray-50 rounded-2xl">
+                  尚未新增任何自訂頭像
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 flex justify-end">
+              <button onClick={() => setIsAvatarModalOpen(false)} className="px-6 py-2 rounded-xl text-gray-500 hover:bg-gray-100 font-bold transition">
+                關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

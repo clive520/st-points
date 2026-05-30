@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, doc, updateDoc, runTransaction, getDocs, increment } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import type { Student, AuctionItem } from '../../types';
+import type { Student, AuctionItem, CustomAvatar } from '../../types';
 import { LogOut, Gift, Star, RefreshCw, Trophy, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { playAddPointSound } from '../../utils/audio';
@@ -15,6 +15,7 @@ export default function StudentDashboard() {
   const [isChangingAvatar, setIsChangingAvatar] = useState(false);
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isBidding, setIsBidding] = useState(false);
+  const [customAvatars, setCustomAvatars] = useState<CustomAvatar[]>([]);
   
   // 使用裁切好的 24 張小怪獸圖片
   const AVATAR_URLS = Array.from({ length: 24 }, (_, i) => `/avatars/avatar_${i + 1}.png`);
@@ -70,6 +71,16 @@ export default function StudentDashboard() {
       unsubWon();
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!student?.classId) return;
+    const qAvatars = query(collection(db, 'avatars'), where('classId', '==', student.classId));
+    const unsubAvatars = onSnapshot(qAvatars, (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as CustomAvatar[];
+      setCustomAvatars(items.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)));
+    });
+    return () => unsubAvatars();
+  }, [student?.classId]);
 
   const fetchClassmates = async (classId: string) => {
     const q = query(collection(db, 'students'), where('classId', '==', classId));
@@ -501,15 +512,12 @@ export default function StudentDashboard() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               onClick={e => e.stopPropagation()}
-              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-2xl shadow-2xl max-h-[80vh] overflow-y-auto"
+              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-2xl shadow-2xl"
             >
-              <div className="text-center mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">選擇你喜歡的頭像</h3>
-                <p className="text-gray-500 text-sm mt-1">選一個最能代表你的可愛圖片吧！</p>
-              </div>
-
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
-                {AVATAR_URLS.map((url) => {
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-6">選擇你的頭像</h3>
+              
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-4 mb-6 max-h-[60vh] overflow-y-auto p-2">
+                {[...AVATAR_URLS, ...customAvatars.map(a => a.imageUrl)].map((url) => {
                   const isSelected = student.avatarUrl === url;
                   return (
                     <div 

@@ -32,3 +32,10 @@ export interface AuctionItem {
   status: 'pending' | 'active' | 'ended'; // 拍賣狀態
   classId: string; // 新增所屬班級ID
 }
+
+export interface CustomAvatar {
+  id: string; // Firebase Document ID
+  classId: string;
+  imageUrl: string; // Base64 image
+  createdAt: number;
+}
