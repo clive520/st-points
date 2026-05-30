@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Gift, Play, Square, Trash2, Image as ImageIcon, Plus } from 'lucide-react';
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, where } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import type { AuctionItem, ClassData } from '../../types';
 import { compressImage } from '../../utils/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAuth } from 'firebase/auth';
+import { playBidSound } from '../../utils/audio';
 
 export default function AuctionManager() {
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [items, setItems] = useState<AuctionItem[]>([]);
+  const prevItemsRef = useRef<AuctionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const auth = getAuth();
@@ -52,25 +54,39 @@ export default function AuctionManager() {
     fetchClasses();
   }, [currentUser]);
 
-  const fetchItems = async () => {
+  useEffect(() => {
     if (!selectedClassId) return;
     setIsLoading(true);
-    try {
-      const q = query(collection(db, 'auctionItems'), where('classId', '==', selectedClassId));
-      const snapshot = await getDocs(q);
+    
+    const q = query(collection(db, 'auctionItems'), where('classId', '==', selectedClassId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as AuctionItem[];
       setItems(data);
-    } catch (error) {
-      console.error('讀取物品失敗:', error);
-    }
-    setIsLoading(false);
-  };
+      setIsLoading(false);
+    }, (error) => {
+      console.error('即時讀取物品失敗:', error);
+      setIsLoading(false);
+    });
 
-  useEffect(() => {
-    if (selectedClassId) {
-      fetchItems();
-    }
+    return () => unsubscribe();
   }, [selectedClassId]);
+
+  // 監聽出價變動播放音效
+  useEffect(() => {
+    if (items.length > 0 && prevItemsRef.current.length > 0) {
+      let bidIncreased = false;
+      items.forEach(item => {
+        const prevItem = prevItemsRef.current.find(p => p.id === item.id);
+        if (prevItem && (item.currentHighestBid || 0) > (prevItem.currentHighestBid || 0)) {
+          bidIncreased = true;
+        }
+      });
+      if (bidIncreased) {
+        playBidSound();
+      }
+    }
+    prevItemsRef.current = items;
+  }, [items]);
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +129,6 @@ export default function AuctionManager() {
       setSelectedFile(null);
       setPreviewUrl('');
       setUploadProgress(0);
-      fetchItems();
     } catch (error) {
       console.error('新增物品失敗:', error);
       alert('上傳失敗，請確認 Firebase Storage 權限設定是否正確。');
@@ -125,7 +140,6 @@ export default function AuctionManager() {
   const handleUpdateStatus = async (id: string, status: AuctionItem['status']) => {
     try {
       await updateDoc(doc(db, 'auctionItems', id), { status });
-      fetchItems();
     } catch (error) {
       console.error('更新狀態失敗:', error);
     }
@@ -135,7 +149,6 @@ export default function AuctionManager() {
     if (!window.confirm('確定要刪除此拍賣物品嗎？')) return;
     try {
       await deleteDoc(doc(db, 'auctionItems', id));
-      fetchItems();
     } catch (error) {
       console.error('刪除物品失敗:', error);
     }
@@ -182,7 +195,10 @@ export default function AuctionManager() {
           {items.map(item => (
             <motion.div 
               layout
-              key={item.id}
+              key={`${item.id}-${item.currentHighestBid}`}
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-gray-100 dark:border-gray-800 flex flex-col"
             >
               <div className="h-40 bg-pink-50 dark:bg-pink-900/20 flex items-center justify-center relative">

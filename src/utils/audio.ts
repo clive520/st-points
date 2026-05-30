@@ -68,3 +68,38 @@ export function playSubPointSound() {
     console.error("Audio play failed", error);
   }
 }
+
+// 播放競標出價音效 (清脆響鈴聲)
+export function playBidSound() {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    osc1.type = 'sine';
+    osc2.type = 'triangle';
+    
+    osc1.frequency.setValueAtTime(1046.5, ctx.currentTime); // C6
+    osc2.frequency.setValueAtTime(1318.51, ctx.currentTime); // E6
+    
+    gainNode.gain.setValueAtTime(0, ctx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+    
+    osc1.connect(gainNode);
+    osc2.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    osc1.start();
+    osc2.start();
+    osc1.stop(ctx.currentTime + 0.5);
+    osc2.stop(ctx.currentTime + 0.5);
+  } catch (error) {
+    console.error("Audio play failed", error);
+  }
+}

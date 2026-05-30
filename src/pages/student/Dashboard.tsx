@@ -107,40 +107,54 @@ export default function StudentDashboard() {
     }
   };
 
-  const handleBid = async (item: AuctionItem) => {
-    if (!student || isBidding) return;
+  // 出價相關狀態
+  const [biddingItem, setBiddingItem] = useState<AuctionItem | null>(null);
+  const [bidAmount, setBidAmount] = useState<number>(0);
+
+  const openBidModal = (item: AuctionItem) => {
+    const minBid = item.currentHighestBid ? item.currentHighestBid + 1 : item.startingPrice;
+    setBiddingItem(item);
+    setBidAmount(minBid);
+  };
+
+  const handleConfirmBid = async () => {
+    if (!student || !biddingItem || isBidding) return;
     
-    const bidIncrement = 10;
-    const requiredBid = item.currentHighestBid ? item.currentHighestBid + bidIncrement : item.startingPrice;
-    
-    if (student.points < requiredBid) {
-      alert(`點數不足！需要 ${requiredBid} 點才能出價。`);
+    if (student.points < bidAmount) {
+      alert(`點數不足！你只有 ${student.points} 點。`);
       return;
     }
 
-    if (item.currentHighestBidderId === student.id) {
-      alert("你目前已經是最高出價者囉！");
+    const minBid = biddingItem.currentHighestBid ? biddingItem.currentHighestBid + 1 : biddingItem.startingPrice;
+    if (bidAmount < minBid) {
+      alert(`出價必須大於等於 ${minBid} 點！`);
       return;
     }
 
     setIsBidding(true);
+    // 這裡我們直接使用原本在元件內的 Transaction，或者你也可以匯入 utils/auction.ts 的 placeBid。
+    // 為了保持狀態更新順暢，我們在這裡執行樂觀鎖 Transaction：
     try {
       await runTransaction(db, async (transaction) => {
-        const itemRef = doc(db, 'auctionItems', item.id);
+        const itemRef = doc(db, 'auctionItems', biddingItem.id);
         const itemDoc = await transaction.get(itemRef);
         if (!itemDoc.exists()) throw new Error("物品不存在");
         
         const currentItem = itemDoc.data() as AuctionItem;
         if (currentItem.status !== 'active') throw new Error("拍賣已結束");
 
-        const actualRequiredBid = currentItem.currentHighestBid ? currentItem.currentHighestBid + bidIncrement : currentItem.startingPrice;
+        const actualRequiredBid = currentItem.currentHighestBid ? currentItem.currentHighestBid + 1 : currentItem.startingPrice;
+        
+        if (bidAmount < actualRequiredBid) {
+          throw new Error(`手腳太慢囉！目前最高價已經來到 ${currentItem.currentHighestBid} 點`);
+        }
         
         const studentRef = doc(db, 'students', student.id);
         const studentDoc = await transaction.get(studentRef);
         const currentStudent = studentDoc.data() as Student;
         
-        if (currentStudent.points < actualRequiredBid) {
-          throw new Error("點數不足！");
+        if (currentStudent.points < bidAmount) {
+          throw new Error("點數餘額不足！");
         }
 
         if (currentItem.currentHighestBidderId) {
@@ -152,13 +166,15 @@ export default function StudentDashboard() {
           }
         }
 
-        transaction.update(studentRef, { points: currentStudent.points - actualRequiredBid });
+        transaction.update(studentRef, { points: currentStudent.points - bidAmount });
         transaction.update(itemRef, {
-          currentHighestBid: actualRequiredBid,
+          currentHighestBid: bidAmount,
           currentHighestBidderId: student.id,
           currentHighestBidderName: currentStudent.name
         });
       });
+      alert('出價成功！你是目前的最高出價者！');
+      setBiddingItem(null);
     } catch (error: any) {
       console.error(error);
       alert("出價失敗：" + error.message);
@@ -320,17 +336,15 @@ export default function StudentDashboard() {
                             </div>
                             
                             <button 
-                              onClick={() => handleBid(item)}
-                              disabled={isWinning || student.points < nextBid || isBidding}
+                              onClick={() => openBidModal(item)}
+                              disabled={isWinning || isBidding}
                               className={`px-6 py-2.5 rounded-xl font-bold transition transform active:scale-95 ${
                                 isWinning 
                                   ? 'bg-yellow-400 text-yellow-900 opacity-80 cursor-not-allowed'
-                                  : student.points < nextBid
-                                    ? 'bg-gray-200 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed'
-                                    : 'bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-500/30 hover:scale-[1.02]'
+                                  : 'bg-pink-600 hover:bg-pink-700 text-white shadow-lg shadow-pink-500/30 hover:scale-[1.02]'
                               }`}
                             >
-                              出價 {nextBid} 點
+                              我要出價
                             </button>
                           </div>
                         </div>
@@ -343,6 +357,74 @@ export default function StudentDashboard() {
           )}
         </motion.div>
       </main>
+
+      {/* 出價 Modal */}
+      <AnimatePresence>
+        {biddingItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setBiddingItem(null)}>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">確認出價</h3>
+              
+              <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-2xl mb-4 border border-pink-100 dark:border-pink-800">
+                <div className="text-sm text-pink-600 dark:text-pink-400 font-bold mb-1">{biddingItem.name}</div>
+                <div className="text-xs text-gray-500">目前最高價：{biddingItem.currentHighestBid || '0'} 點</div>
+                <div className="text-xs text-gray-500">你的可用點數：{student.points} 點</div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                  請輸入你要出價的點數：
+                </label>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setBidAmount(prev => Math.max((biddingItem.currentHighestBid || biddingItem.startingPrice - 1) + 1, prev - 10))}
+                    className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 font-bold flex items-center justify-center"
+                  >-</button>
+                  <input 
+                    type="number"
+                    value={bidAmount}
+                    onChange={(e) => setBidAmount(parseInt(e.target.value) || 0)}
+                    className="flex-1 text-center px-4 py-3 text-2xl font-black text-pink-600 dark:text-pink-400 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  />
+                  <button 
+                    onClick={() => setBidAmount(prev => prev + 10)}
+                    className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 font-bold flex items-center justify-center"
+                  >+</button>
+                </div>
+                {bidAmount > student.points && (
+                  <div className="text-red-500 text-xs font-bold mt-2 text-center">點數不足！</div>
+                )}
+                {bidAmount <= (biddingItem.currentHighestBid || biddingItem.startingPrice - 1) && (
+                  <div className="text-red-500 text-xs font-bold mt-2 text-center">出價必須大於目前最高價！</div>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setBiddingItem(null)}
+                  className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-200 transition"
+                  disabled={isBidding}
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleConfirmBid}
+                  disabled={isBidding || bidAmount > student.points || bidAmount <= (biddingItem.currentHighestBid || biddingItem.startingPrice - 1)}
+                  className="flex-1 py-3 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition flex justify-center items-center gap-2"
+                >
+                  {isBidding ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '確定出價'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* 頭像選擇 Modal */}
       <AnimatePresence>

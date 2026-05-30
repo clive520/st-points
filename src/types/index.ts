@@ -30,4 +30,5 @@ export interface AuctionItem {
   currentHighestBidderId?: string;
   currentHighestBidderName?: string;
   status: 'pending' | 'active' | 'ended'; // 拍賣狀態
+  classId: string; // 新增所屬班級ID
 }
