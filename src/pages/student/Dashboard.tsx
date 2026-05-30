@@ -288,7 +288,6 @@ export default function StudentDashboard() {
               <AnimatePresence>
                 {auctionItems.map(item => {
                   const isWinning = item.currentHighestBidderId === student.id;
-                  const nextBid = item.currentHighestBid ? item.currentHighestBid + 10 : item.startingPrice;
                   
                   return (
                     <motion.div 

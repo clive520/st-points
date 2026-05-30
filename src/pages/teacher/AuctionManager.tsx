@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Gift, Play, Square, Trash2, Image as ImageIcon, Plus } from 'lucide-react';
-import { collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import type { AuctionItem, ClassData } from '../../types';
 import { compressImage } from '../../utils/image';
