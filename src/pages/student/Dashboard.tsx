@@ -332,7 +332,11 @@ export default function StudentDashboard() {
                             <div>
                               <div className="text-xs text-gray-400">目前最高價</div>
                               <div className="text-2xl font-black text-pink-600 dark:text-pink-400">
-                                {item.currentHighestBid || '尚未出價'}
+                                {item.currentHighestBid ? (
+                                  `${item.currentHighestBid} 點`
+                                ) : (
+                                  <span>{item.startingPrice} 點 <span className="text-sm font-normal text-gray-400">(尚未出價)</span></span>
+                                )}
                               </div>
                             </div>
                             
@@ -376,7 +380,7 @@ export default function StudentDashboard() {
               
               <div className="bg-pink-50 dark:bg-pink-900/20 p-4 rounded-2xl mb-4 border border-pink-100 dark:border-pink-800">
                 <div className="text-sm text-pink-600 dark:text-pink-400 font-bold mb-1">{biddingItem.name}</div>
-                <div className="text-xs text-gray-500">目前最高價：{biddingItem.currentHighestBid || '0'} 點</div>
+                <div className="text-xs text-gray-500">目前最高價：{biddingItem.currentHighestBid ? `${biddingItem.currentHighestBid} 點` : `${biddingItem.startingPrice} 點 (尚未出價)`}</div>
                 <div className="text-xs text-gray-500">你的可用點數：{student.points} 點</div>
               </div>
 
