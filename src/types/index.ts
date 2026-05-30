@@ -17,6 +17,7 @@ export interface Student {
   avatarUrl: string; // 頭像網址
   authUid?: string; // 保留供未來需要，或向下相容
   isAssistant?: boolean; // 是否為加分小老師
+  unlockedAvatars?: string[]; // 已解鎖的付費頭像清單
 }
 
 export interface AuctionItem {
@@ -37,5 +38,6 @@ export interface CustomAvatar {
   id: string; // Firebase Document ID
   classId: string;
   imageUrl: string; // Base64 image
+  price: number; // 頭像解鎖價格
   createdAt: number;
 }

@@ -32,6 +32,9 @@ export default function ClassDetails() {
   const [customAvatars, setCustomAvatars] = useState<CustomAvatar[]>([]);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [avatarPrice, setAvatarPrice] = useState(0);
 
   const auth = getAuth();
   const currentUser = auth.currentUser;
@@ -70,13 +73,22 @@ export default function ClassDetails() {
     return () => unsubAvatars();
   }, [classId]);
 
-  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !classId) return;
+    if (!file) return;
+    setPendingAvatarFile(file);
+    setAvatarPrice(0); // 預設 0 點
+    setIsPriceModalOpen(true);
+  };
+
+  const handleConfirmUploadAvatar = async () => {
+    if (!pendingAvatarFile || !classId) return;
 
     setIsUploadingAvatar(true);
+    setIsPriceModalOpen(false);
+    
     try {
-      const compressedBlob = await compressImage(file, 200);
+      const compressedBlob = await compressImage(pendingAvatarFile, 200);
       const base64Url = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
@@ -87,6 +99,7 @@ export default function ClassDetails() {
       await addDoc(collection(db, 'avatars'), {
         classId,
         imageUrl: base64Url,
+        price: avatarPrice,
         createdAt: Date.now()
       });
       
@@ -95,6 +108,7 @@ export default function ClassDetails() {
       alert('上傳頭像失敗');
     } finally {
       setIsUploadingAvatar(false);
+      setPendingAvatarFile(null);
       if (avatarFileInputRef.current) {
         avatarFileInputRef.current.value = '';
       }
@@ -570,7 +584,7 @@ export default function ClassDetails() {
                 accept="image/*" 
                 className="hidden" 
                 ref={avatarFileInputRef}
-                onChange={handleUploadAvatar}
+                onChange={handleFileSelect}
               />
               <button 
                 onClick={() => avatarFileInputRef.current?.click()}
@@ -592,6 +606,11 @@ export default function ClassDetails() {
                 <div key={avatar.id} className="relative group">
                   <div className="aspect-square rounded-2xl overflow-hidden border-2 border-gray-100 bg-gray-50 flex items-center justify-center p-2">
                     <img src={avatar.imageUrl} alt="Custom Avatar" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="absolute -bottom-2 inset-x-0 flex justify-center">
+                    <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                      {avatar.price > 0 ? `${avatar.price} 點` : '免費'}
+                    </span>
                   </div>
                   <button
                     onClick={() => handleDeleteAvatar(avatar)}
@@ -617,6 +636,55 @@ export default function ClassDetails() {
           </div>
         </div>
       )}
+
+      {/* 設定頭像價格 Modal */}
+      <AnimatePresence>
+        {isPriceModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <h3 className="text-xl font-bold text-gray-900 mb-4">設定解鎖價格</h3>
+              <p className="text-sm text-gray-500 mb-6">
+                請輸入學生需要花費多少點數才能解鎖此頭像。（若設為 0 則免費更換）
+              </p>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-1">解鎖點數</label>
+                <input 
+                  type="number" 
+                  min="0"
+                  value={avatarPrice} 
+                  onChange={e => setAvatarPrice(Math.max(0, parseInt(e.target.value) || 0))} 
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setIsPriceModalOpen(false);
+                    setPendingAvatarFile(null);
+                    if (avatarFileInputRef.current) avatarFileInputRef.current.value = '';
+                  }} 
+                  className="flex-1 py-3 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition"
+                >
+                  取消
+                </button>
+                <button 
+                  onClick={handleConfirmUploadAvatar} 
+                  className="flex-1 py-3 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition shadow-md"
+                >
+                  確認上傳
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

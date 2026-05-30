@@ -16,9 +16,11 @@ export default function StudentDashboard() {
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
   const [isBidding, setIsBidding] = useState(false);
   const [customAvatars, setCustomAvatars] = useState<CustomAvatar[]>([]);
+  const [selectedAvatarToBuy, setSelectedAvatarToBuy] = useState<CustomAvatar | null>(null);
+  const [isBuyingAvatar, setIsBuyingAvatar] = useState(false);
   
-  // 使用裁切好的 24 張小怪獸圖片
-  const AVATAR_URLS = Array.from({ length: 24 }, (_, i) => `/avatars/avatar_${i + 1}.png`);
+  // 使用裁切好的 12 張小怪獸圖片 (原本 24 張)
+  const AVATAR_URLS = Array.from({ length: 12 }, (_, i) => `/avatars/avatar_${i + 1}.png`);
   
   const navigate = useNavigate();
 
@@ -102,8 +104,22 @@ export default function StudentDashboard() {
 
   const handleSelectAvatar = async (url: string) => {
     if (!student) return;
-    setIsChangingAvatar(true);
     
+    // 判斷是否為付費的自訂頭像
+    const custom = customAvatars.find(a => a.imageUrl === url);
+    const isUnlocked = student.unlockedAvatars?.includes(url);
+
+    if (custom && custom.price > 0 && !isUnlocked) {
+      if (student.points < custom.price) {
+        alert(`點數不足！解鎖需要 ${custom.price} 點，你目前只有 ${student.points} 點。`);
+        return;
+      }
+      setSelectedAvatarToBuy(custom);
+      return;
+    }
+
+    // 免費或已解鎖，直接更換
+    setIsChangingAvatar(true);
     try {
       await updateDoc(doc(db, 'students', student.id), { avatarUrl: url });
       setIsAvatarModalOpen(false);
@@ -112,6 +128,43 @@ export default function StudentDashboard() {
       alert('更換頭像失敗');
     }
     setIsChangingAvatar(false);
+  };
+
+  const handleBuyAvatar = async () => {
+    if (!student || !selectedAvatarToBuy) return;
+    
+    setIsBuyingAvatar(true);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const studentRef = doc(db, 'students', student.id);
+        const sfDoc = await transaction.get(studentRef);
+        if (!sfDoc.exists()) throw new Error("Student does not exist!");
+        
+        const currentPoints = sfDoc.data().points || 0;
+        if (currentPoints < selectedAvatarToBuy.price) {
+          throw new Error("Points insufficient");
+        }
+        
+        const currentUnlocked = sfDoc.data().unlockedAvatars || [];
+        
+        transaction.update(studentRef, {
+          points: currentPoints - selectedAvatarToBuy.price,
+          avatarUrl: selectedAvatarToBuy.imageUrl,
+          unlockedAvatars: [...currentUnlocked, selectedAvatarToBuy.imageUrl]
+        });
+      });
+      
+      setSelectedAvatarToBuy(null);
+      setIsAvatarModalOpen(false);
+    } catch (error: any) {
+      console.error("購買頭像失敗", error);
+      if (error.message === "Points insufficient") {
+        alert("點數不足！無法購買。");
+      } else {
+        alert("購買失敗，請稍後再試。");
+      }
+    }
+    setIsBuyingAvatar(false);
   };
 
   // 小老師幫同學加分
@@ -519,6 +572,11 @@ export default function StudentDashboard() {
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-4 mb-6 max-h-[60vh] overflow-y-auto p-2">
                 {[...AVATAR_URLS, ...customAvatars.map(a => a.imageUrl)].map((url) => {
                   const isSelected = student.avatarUrl === url;
+                  const custom = customAvatars.find(a => a.imageUrl === url);
+                  const isCustom = !!custom;
+                  const price = custom?.price || 0;
+                  const isUnlocked = student.unlockedAvatars?.includes(url) || price === 0;
+
                   return (
                     <div 
                       key={url}
@@ -527,9 +585,20 @@ export default function StudentDashboard() {
                         isSelected ? 'border-purple-500 shadow-lg shadow-purple-500/30' : 'border-transparent hover:border-purple-200 dark:hover:border-purple-800 bg-gray-50 dark:bg-gray-800'
                       }`}
                     >
-                      <img src={url} alt="Avatar" className="w-full h-auto aspect-square object-contain p-2 drop-shadow-md" />
+                      <img src={url} alt="Avatar" className={`w-full h-auto aspect-square object-contain p-2 drop-shadow-md ${!isUnlocked ? 'opacity-50 grayscale' : ''}`} />
                       {isSelected && (
                         <div className="absolute inset-0 bg-purple-500/10 flex items-center justify-center">
+                        </div>
+                      )}
+                      {isCustom && (
+                        <div className="absolute -bottom-1 inset-x-0 flex justify-center pb-1">
+                          {isUnlocked ? (
+                            <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 rounded-full shadow-sm">已解鎖</span>
+                          ) : (
+                            <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 rounded-full shadow-sm flex items-center gap-1">
+                              💎 {price}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -540,9 +609,48 @@ export default function StudentDashboard() {
               <div className="mt-8 flex justify-center">
                 <button 
                   onClick={() => setIsAvatarModalOpen(false)}
-                  className="px-6 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-colors"
+                  className="px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition"
+                >
+                  關閉
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 購買頭像確認 Modal */}
+      <AnimatePresence>
+        {selectedAvatarToBuy && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center"
+            >
+              <h3 className="text-xl font-bold text-gray-900 mb-2">解鎖新頭像</h3>
+              <div className="mx-auto w-32 h-32 bg-gray-50 rounded-2xl p-4 my-4">
+                <img src={selectedAvatarToBuy.imageUrl} alt="Avatar" className="w-full h-full object-contain drop-shadow-md" />
+              </div>
+              <p className="text-gray-600 mb-6">
+                確定要花費 <span className="font-bold text-amber-500">{selectedAvatarToBuy.price} 點</span> 來永久解鎖並更換這個頭像嗎？
+              </p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setSelectedAvatarToBuy(null)}
+                  disabled={isBuyingAvatar}
+                  className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl transition disabled:opacity-50"
                 >
                   取消
+                </button>
+                <button 
+                  onClick={handleBuyAvatar}
+                  disabled={isBuyingAvatar || student!.points < selectedAvatarToBuy.price}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition disabled:opacity-50 flex justify-center items-center gap-2"
+                >
+                  {isBuyingAvatar ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : '確定解鎖'}
                 </button>
               </div>
             </motion.div>
