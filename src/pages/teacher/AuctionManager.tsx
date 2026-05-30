@@ -115,14 +115,22 @@ export default function AuctionManager() {
         setUploadProgress(100);
       }
 
-      await addDoc(collection(db, 'auctionItems'), {
-        ...newItem,
-        imageUrl: finalImageUrl,
-        status: 'pending',
-        currentHighestBid: 0,
-        currentHighestBidderId: null,
-        classId: selectedClassId
-      });
+      const promises = [];
+      for (let i = 0; i < newItem.quantity; i++) {
+        const nameSuffix = newItem.quantity > 1 ? ` (${i + 1}/${newItem.quantity})` : '';
+        promises.push(addDoc(collection(db, 'auctionItems'), {
+          ...newItem,
+          name: `${newItem.name}${nameSuffix}`,
+          quantity: 1, // 拆分後的獨立物品數量皆為 1
+          imageUrl: finalImageUrl,
+          status: 'pending',
+          currentHighestBid: 0,
+          currentHighestBidderId: null,
+          classId: selectedClassId
+        }));
+      }
+      
+      await Promise.all(promises);
       
       setIsModalOpen(false);
       setNewItem({ name: '', description: '', startingPrice: 10, quantity: 1, imageUrl: '' });
